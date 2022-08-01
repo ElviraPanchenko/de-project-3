@@ -83,7 +83,7 @@ def get_increment(date, ti):
     print(f'increment_id={increment_id}')
 
 
-def upload_data_to_staging(filename, date, pg_table, pg_schema, ti):
+def upload_data_to_staging1(filename, date, pg_table, pg_schema, ti):
     increment_id = ti.xcom_pull(key='increment_id')
     s3_filename = f'https://storage.yandexcloud.net/s3-sprint3/cohort_{cohort}/{nickname}/project/{increment_id}/{filename}'
 
@@ -94,6 +94,8 @@ def upload_data_to_staging(filename, date, pg_table, pg_schema, ti):
         file.write(response.content)
 
     df = pd.read_csv(local_filename)
+
+
     df.drop_duplicates(subset=['id'], inplace=True)
     df.drop(columns=['id'],inplace=True)    
 
@@ -124,9 +126,9 @@ def upload_data_to_staging(filename, date, pg_table, pg_schema, ti):
     except:
         print('date cleanup error')
     try:
-        df.to_sql(pg_table, engine, schema=pg_schema, if_exists='append', index=False)
+        #df.to_sql(pg_table, engine, schema=pg_schema, if_exists='append', index=False)
         task_logger.info('Upload success', business_dt)
-        #COPY pg_table FROM 'C:\tmp\sample_data.csv' DELIMITER ',' CSV HEADER;
+        COPY pg_table FROM PROGRAM 'curl s3_filename';
     except:
         print('load data to staging error')
 
@@ -164,7 +166,7 @@ with DAG(
 
     upload_user_order_inc = PythonOperator(
         task_id='upload_user_order_inc',
-        python_callable=upload_data_to_staging,
+        python_callable=upload_data_to_staging1,
         op_kwargs={'date': business_dt,
                    'filename': 'user_orders_log_inc.csv',
                    'pg_table': 'user_order_log',
