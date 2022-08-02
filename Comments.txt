@@ -1,56 +1,5 @@
 <<<<<<< HEAD
+Вообще все что ты пишешь прямо не указано в задании
+Я как понимаю это все факультативно. Результат по проекту достигнут!
 
-1. Можно сделать два уровня стейджинга в SQL. 
-Я совсем не понимаю как это сделать :( 
- Надо создать еще 1 функцию? Какую часть своего кода заменить функцией ? 
-Начиная с этого момента - « df.drop_duplicates(subset=['id'], inplace=True)»? 
-Что должно передаваться в функцию?  
-
-А эту часть  ниже всю тоже в функцию ? 
- postgres_hook = PostgresHook(postgres_conn_id)
-    engine = postgres_hook.get_sqlalchemy_engine()
-    
-    try:
-        print('status' in df.columns)  
-    except:
-        print('create staging table error')
-
-    migration_sql = '''
-        alter table if exists staging.user_order_log add column if not exists "status" varchar(50);
-        alter table if exists mart.f_sales add column if not exists "status" varchar(50);
-        alter table if exists staging.user_order_log alter column status set default 'shipped';
-        '''    
-    try:
-        postgres_hook.run(migration_sql, autocommit=True)
-    except:
-        print('migration error error')
-    
-    delete_date_sql = f'''
-        delete from staging.user_order_log where date_time::date = '{date}'
-        '''
-    try: 
-        postgres_hook.run(delete_date_sql, autocommit=True)
-        print('date cleaned up ', business_dt)
-    except:
-        print('date cleanup error')
-    try:
-        df.to_sql(pg_table, engine, schema=pg_schema, if_exists='append', index=False)
-        task_logger.info('Upload success', business_dt)
-        #COPY pg_table FROM 'C:\tmp\sample_data.csv' DELIMITER ',' CSV HEADER;
-    except:
-        print('load data to staging error')
-
-
-
-2. Так тут выполнение SQL прям посередине скрипта, как я могу это заменить оператором именно чтоб эта часть выполнялась? Дальше же просто скрипт дальше идет… непонятно совсем
-
-
-
-=======
-Можно сделать два уровня стейджинга в SQL. В один мы просто льём данные не думая, а потом перекладываем из него в другой стейджинг, проверяя его на дубликаты и выполняя другие трансформации. После этих операций данные из первого мусорного стейджинга можно просто удалить.  
-Покажи, пожалуйста, как это реализовать? 
-
-В некоторых командах принято sql запросы держать в отдельных sql файлах. Как обращаться к этим файлам и реализовывать лежащие там запросы? 
-
- Поэтому тут стоит сделать отдельные стейдж таблицы. Это как? Не поняла как работать с COPY
->>>>>>> a77a7899d34b4abea323e39a269185f4a453d7d8
+Если есть возможность. Скинь мне код,  я посмотрю. Буду знать что так можно делать. Спасибо! 
