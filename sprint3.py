@@ -1,21 +1,17 @@
 import time
 import requests
 import json
+import psycopg2
 import pandas as pd
+import io
 
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator, BranchPythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
-from airflow.hooks.base import BaseHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.hooks.http_hook import HttpHook
-
-# import the logging module
-import logging
-
-# get the airflow.task logger
-task_logger = logging.getLogger('airflow.task')
+from airflow.models.xcom import XCom
 
 http_conn_id = HttpHook.get_connection('http_conn_id')
 api_key = http_conn_id.extra_dejson.get('api_key')
@@ -23,8 +19,8 @@ base_url = http_conn_id.host
 
 postgres_conn_id = 'postgresql_de'
 
-nickname = 'Elvira Panchenko'
-cohort = '3'
+nickname = "panchenkoelvira"
+cohort = "20"
 
 headers = {
     'X-Nickname': nickname,
@@ -36,7 +32,7 @@ headers = {
 
 
 def generate_report(ti):
-    task_logger.info('Making request generate_report')
+    print('Making request generate_report')
 
     response = requests.post(f'{base_url}/generate_report', headers=headers)
     response.raise_for_status()
@@ -46,7 +42,7 @@ def generate_report(ti):
 
 
 def get_report(ti):
-    task_logger.info('Making request get_report')
+    print('Making request get_report')
     task_id = ti.xcom_pull(key='task_id')
 
     report_id = None
@@ -70,7 +66,7 @@ def get_report(ti):
 
 
 def get_increment(date, ti):
-    task_logger.info('Making request get_increment')
+    print('Making request get_increment')
     report_id = ti.xcom_pull(key='report_id')
     response = requests.get(
         f'{base_url}/get_increment?report_id={report_id}&date={str(date)}T00:00:00',
@@ -79,11 +75,30 @@ def get_increment(date, ti):
     print(f'Response is {response.content}')
 
     increment_id = json.loads(response.content)['data']['increment_id']
+    if not increment_id:
+        raise ValueError(f'Increment is empty. Most probably due to error in API call.')
+    
     ti.xcom_push(key='increment_id', value=increment_id)
     print(f'increment_id={increment_id}')
 
 
-def upload_data_to_staging1(filename, date, pg_table, pg_schema, ti):
+def upload_data_to_staging(filename, date, pg_table, pg_schema, ti): 
+    # increment_id = ti.xcom_pull(key='increment_id') 
+    # s3_filename = f'https://storage.yandexcloud.net/s3-sprint3/cohort{cohort}/{nickname}/project/{increment_id}/{filename}' 
+    # if increment_id is not None: 
+    #     response = requests.get(s3_filename).content 
+    #     f = io.StringIO(response.decode('utf-8')) 
+    #     conn = psycopg2.connect(dbname='de', host='localhost', port='5432', user='jovyan', password='jovyan') 
+    #     cur = conn.cursor() 
+    #     if 'status' in f.readline(): 
+    #         cur.copy_expert(f'COPY {pg_schema}.{pg_table} (date_time,city_id,city_name,customer_id,first_name,last_name,item_id,item_name,quantity,payment_amount,status) FROM STDIN WITH CSV', f)           
+    #     else: 
+    #         cur.copy_expert(f'COPY {pg_schema}.{pg_table} (date_time,city_id,city_name,customer_id,first_name,last_name,item_id,item_name,quantity,payment_amount) FROM STDIN WITH CSV', f) 
+    #     conn.commit() 
+    #     cur.close()   
+    # else: 
+    #     logging.warning('Task without increment_id') 
+    
     increment_id = ti.xcom_pull(key='increment_id')
     s3_filename = f'https://storage.yandexcloud.net/s3-sprint3/cohort_{cohort}/{nickname}/project/{increment_id}/{filename}'
 
@@ -125,12 +140,28 @@ def upload_data_to_staging1(filename, date, pg_table, pg_schema, ti):
         print('date cleaned up ', business_dt)
     except:
         print('date cleanup error')
-    try:
-        #df.to_sql(pg_table, engine, schema=pg_schema, if_exists='append', index=False)
-        task_logger.info('Upload success', business_dt)
-        COPY pg_table FROM PROGRAM 'curl s3_filename';
-    except:
-        print('load data to staging error')
+
+    # increment_id = ti.xcom_pull(key='increment_id')
+    # s3_filename = f'https://storage.yandexcloud.net/s3-sprint3/cohort_{cohort}/{nickname}/project/{increment_id}/{filename}'
+    # print(s3_filename)
+    # local_filename = date.replace('-', '') + '_' + filename
+    # print(local_filename)
+    # response = requests.get(s3_filename)
+    # response.raise_for_status()
+    # open(f"{local_filename}", "wb").write(response.content)
+    # print(response.content)
+
+    # df = pd.read_csv(local_filename)
+    # df=df.drop('id', axis=1)
+    # df=df.drop_duplicates(subset=['uniq_id'])
+
+    # if 'status' not in df.columns:
+    #     df['status'] = 'shipped'
+
+    # postgres_hook = PostgresHook(postgres_conn_id)
+    # engine = postgres_hook.get_sqlalchemy_engine()
+    # row_count = df.to_sql(pg_table, engine, schema=pg_schema, if_exists='append', index=False)
+    # print(f'{row_count} rows was inserted')
 
 
 args = {
@@ -144,11 +175,11 @@ args = {
 business_dt = '{{ ds }}'
 
 with DAG(
-        'customer_retention',
+        'sales_mart',
         default_args=args,
         description='Provide default dag for sprint3',
         catchup=True,
-        start_date=datetime.today() - timedelta(days=8),
+        start_date=datetime.today() - timedelta(days=7),
         end_date=datetime.today() - timedelta(days=1),
 ) as dag:
     generate_report = PythonOperator(
@@ -166,9 +197,9 @@ with DAG(
 
     upload_user_order_inc = PythonOperator(
         task_id='upload_user_order_inc',
-        python_callable=upload_data_to_staging1,
+        python_callable=upload_data_to_staging,
         op_kwargs={'date': business_dt,
-                   'filename': 'user_orders_log_inc.csv',
+                   'filename': 'user_order_log_inc.csv',
                    'pg_table': 'user_order_log',
                    'pg_schema': 'staging'})
 
@@ -194,21 +225,11 @@ with DAG(
         parameters={"date": {business_dt}}
     )
 
-    update_f_customer_retention = PostgresOperator(
-        task_id='update_f_customer_retention',
-        postgres_conn_id=postgres_conn_id,
-        sql="sql/mart.f_customer_retention.sql",
-        parameters={"date": {business_dt}}
-    )
-
     (
             generate_report
             >> get_report
             >> get_increment
             >> upload_user_order_inc
-            >> [update_d_item_table, update_d_city_table, update_d_customer_table, ]
+            >> [update_d_item_table, update_d_city_table, update_d_customer_table]
             >> update_f_sales
-            >> update_f_customer_retention
     )
-
-
